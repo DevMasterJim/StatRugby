@@ -9,7 +9,7 @@ st.title("Import JSON Match → Supabase")
 st.sidebar.header("🔐 Connexion Supabase")
 
 supabase_url = st.sidebar.text_input("Supabase URL", placeholder="https://fhkqflmfcejxoarbizkt.supabase.co")
-supabase_key = st.sidebar.text_input("Supabase API Key", placeholder="eyJhbGciOi...", type="password")
+supabase_key = st.sidebar.text_input("Supabase API Key", placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZoa3FmbG1mY2VqeG9hcmJpemt0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3NDM3MjAsImV4cCI6MjA3NTMxOTcyMH0.2XxvHdI6nqNNDnbynTPULUbL-2lvS7JAsy3C8-dcsPE", type="password")
 
 if not supabase_url or not supabase_key:
     st.warning("➡️ Renseigne ton URL et ta clé Supabase dans la barre latérale.")
