@@ -1,6 +1,6 @@
-import json
 import streamlit as st
-from supabase import create_client, Client
+import requests
+import json
 from datetime import datetime
 
 st.title("Import JSON Match → Supabase")
