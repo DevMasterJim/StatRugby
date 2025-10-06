@@ -23,7 +23,7 @@ if uploaded_file is not None:
         st.json(data)
 
         rencontre = data["data"]["Rencontre"]
-        equipes_data = [rencontre["Equipe"], rencontre["Adversaire"]]
+        equipes_data = [rencontre["CompetitionEquipeLocale"], rencontre["CompetitionEquipeVisiteuse"]]
 
         equipe_ids = {}
 
