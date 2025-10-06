@@ -8,7 +8,7 @@ st.title("Import JSON Match → Supabase")
 # === Configuration manuelle de la connexion ===
 st.sidebar.header("🔐 Connexion Supabase")
 
-supabase_url = st.sidebar.text_input("Supabase URL", placeholder="https://xxxx.supabase.co")
+supabase_url = st.sidebar.text_input("Supabase URL", placeholder="https://fhkqflmfcejxoarbizkt.supabase.co")
 supabase_key = st.sidebar.text_input("Supabase API Key", placeholder="eyJhbGciOi...", type="password")
 
 if not supabase_url or not supabase_key:
