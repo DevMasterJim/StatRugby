@@ -26,62 +26,62 @@ if uploaded_file is not None:
 
         # --- 1️⃣ Insérer les équipes ---
         # --- Equipe domicile ---
-            nom = rencontre["CompetitionEquipeLocale"]["Nom"]
+        nom = rencontre["CompetitionEquipeLocale"]["Nom"]
 
-            # Vérifier si l'équipe existe déjà
-            resp = requests.get(
+        # Vérifier si l'équipe existe déjà
+        resp = requests.get(
+            f"{SUPABASE_URL}/rest/v1/equipes",
+            headers=headers,
+            params={"nom": f"eq.{nom}"}
+        )
+        if resp.status_code != 200:
+            st.error(f"Erreur GET équipes : {resp.status_code}")
+            continue
+
+        results = resp.json()
+        if results:
+            equipe_ids[nom] = results[0]["id"]
+        else:
+            # Création de l'équipe
+            resp_post = requests.post(
                 f"{SUPABASE_URL}/rest/v1/equipes",
                 headers=headers,
-                params={"nom": f"eq.{nom}"}
+                json={"nom": nom}
             )
-            if resp.status_code != 200:
-                st.error(f"Erreur GET équipes : {resp.status_code}")
-                continue
-
-            results = resp.json()
-            if results:
-                equipe_ids[nom] = results[0]["id"]
+            if resp_post.status_code in [200, 201]:
+                equipe_ids[nom] = resp_post.json()[0]["id"] if resp_post.json() else None
+                st.success(f"Équipe '{nom}' ajoutée")
             else:
-                # Création de l'équipe
-                resp_post = requests.post(
-                    f"{SUPABASE_URL}/rest/v1/equipes",
-                    headers=headers,
-                    json={"nom": nom}
-                )
-                if resp_post.status_code in [200, 201]:
-                    equipe_ids[nom] = resp_post.json()[0]["id"] if resp_post.json() else None
-                    st.success(f"Équipe '{nom}' ajoutée")
-                else:
-                    st.error(f"Erreur POST équipe '{nom}' : {resp_post.text}")
+                st.error(f"Erreur POST équipe '{nom}' : {resp_post.text}")
         
         # --- Equipe visiteuse ---
-            nom = rencontre["CompetitionEquipeVisiteuse"]["Nom"]
+        nom = rencontre["CompetitionEquipeVisiteuse"]["Nom"]
 
-            # Vérifier si l'équipe existe déjà
-            resp = requests.get(
+        # Vérifier si l'équipe existe déjà
+        resp = requests.get(
+            f"{SUPABASE_URL}/rest/v1/equipes",
+            headers=headers,
+            params={"nom": f"eq.{nom}"}
+        )
+        if resp.status_code != 200:
+            st.error(f"Erreur GET équipes : {resp.status_code}")
+            continue
+
+        results = resp.json()
+        if results:
+            equipe_ids[nom] = results[0]["id"]
+        else:
+            # Création de l'équipe
+            resp_post = requests.post(
                 f"{SUPABASE_URL}/rest/v1/equipes",
                 headers=headers,
-                params={"nom": f"eq.{nom}"}
+                json={"nom": nom}
             )
-            if resp.status_code != 200:
-                st.error(f"Erreur GET équipes : {resp.status_code}")
-                continue
-
-            results = resp.json()
-            if results:
-                equipe_ids[nom] = results[0]["id"]
+            if resp_post.status_code in [200, 201]:
+                equipe_ids[nom] = resp_post.json()[0]["id"] if resp_post.json() else None
+                st.success(f"Équipe '{nom}' ajoutée")
             else:
-                # Création de l'équipe
-                resp_post = requests.post(
-                    f"{SUPABASE_URL}/rest/v1/equipes",
-                    headers=headers,
-                    json={"nom": nom}
-                )
-                if resp_post.status_code in [200, 201]:
-                    equipe_ids[nom] = resp_post.json()[0]["id"] if resp_post.json() else None
-                    st.success(f"Équipe '{nom}' ajoutée")
-                else:
-                    st.error(f"Erreur POST équipe '{nom}' : {resp_post.text}")
+                st.error(f"Erreur POST équipe '{nom}' : {resp_post.text}")
 
         
         # --- 2️⃣ Insérer la journée ---
