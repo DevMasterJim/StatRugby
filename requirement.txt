@@ -1,2 +1,2 @@
 streamlit
-git+https://github.com/supabase-community/supabase-py.git
+requests
