@@ -1,164 +1,152 @@
 import streamlit as st
 import requests
 import json
-from datetime import datetime
 
-st.title("Import JSON Match → Supabase")
+# --- Connexion Supabase via API REST ---
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
-# === Configuration manuelle de la connexion ===
-st.sidebar.header("🔐 Connexion Supabase")
-
-supabase_url = st.sidebar.text_input("Supabase URL", placeholder="https://fhkqflmfcejxoarbizkt.supabase.co")
-supabase_key = st.sidebar.text_input("Supabase API Key", placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZoa3FmbG1mY2VqeG9hcmJpemt0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3NDM3MjAsImV4cCI6MjA3NTMxOTcyMH0.2XxvHdI6nqNNDnbynTPULUbL-2lvS7JAsy3C8-dcsPE", type="password")
-
-if not supabase_url or not supabase_key:
-    st.warning("➡️ Renseigne ton URL et ta clé Supabase dans la barre latérale.")
-    st.stop()
-
-# Connexion
-try:
-    supabase: Client = create_client(supabase_url, supabase_key)
-except Exception as e:
-    st.error(f"Erreur de connexion Supabase : {e}")
-    st.stop()
-
-# === Chargement du fichier JSON ===
-uploaded_file = st.file_uploader("Choisis un fichier JSON (un match)", type=["json"])
-
-ACTION_POINTS = {
-    "TRY": 5,
-    "GOALPENALTY": 3,
-    "PENALTY": 3,
-    "CONVERSION": 2,
-    "TRANSFORMATION": 2,
-    "DROP": 3,
-    "DROPGOAL": 3
+headers = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json"
 }
 
-def safe_get(d, *keys):
-    cur = d
-    for k in keys:
-        if cur is None:
-            return None
-        cur = cur.get(k)
-    return cur
+# --- Interface Streamlit ---
+st.title("📥 Import JSON Rugby vers Supabase")
 
-def upsert_equipe(equipe_id: int, nom: str):
-    res = supabase.table("equipes").select("id").eq("id", equipe_id).execute()
-    if res.data:
-        return equipe_id
-    supabase.table("equipes").insert({"id": equipe_id, "nom": nom}).execute()
-    return equipe_id
+uploaded_file = st.file_uploader("Choisis un fichier JSON de match", type=["json"])
 
-def find_journee(equipe_id: int, rencontre_id: int):
-    res = supabase.table("journees").select("*").eq("equipe_id", equipe_id).eq("rencontre_id", rencontre_id).execute()
-    return res.data[0] if res.data else None
+if uploaded_file is not None:
+    try:
+        data = json.load(uploaded_file)
+        st.json(data)
 
-def create_journee(equipe_id:int, rencontre_id:int, numero:str, date_iso:str, adversaire:str, score:int):
-    payload = {
-        "equipe_id": equipe_id,
-        "rencontre_id": rencontre_id,
-        "numero": numero,
-        "date": date_iso,
-        "adversaire": adversaire,
-        "score_dom": score
-    }
-    res = supabase.table("journees").insert(payload).execute()
-    return res.data[0]
+        rencontre = data["Rencontre"]
+        equipes_data = [rencontre["Equipe"], rencontre["Adversaire"]]
 
-def upsert_joueur(pid:int, nom:str, prenom:str):
-    r = supabase.table("joueurs").select("id").eq("id", pid).execute()
-    if r.data:
-        return pid
-    supabase.table("joueurs").insert({"id": pid, "nom": nom, "prenom": prenom}).execute()
-    return pid
+        equipe_ids = {}
 
-def insert_presence(joueur_id, journee_id, presence=None):
-    supabase.table("presence_joueurs").insert({
-        "joueur_id": joueur_id,
-        "journee_id": journee_id,
-        "presence": presence
-    }).execute()
+        # --- 1️⃣ Insérer les équipes ---
+        for equipe in equipes_data:
+            nom = equipe["Nom"]
 
-def insert_point_marque(joueur_id, journee_id, typ, minute, pts):
-    supabase.table("points_marques_joueur").insert({
-        "joueur_id": joueur_id,
-        "journee_id": journee_id,
-        "type": typ,
-        "minute": minute,
-        "nb_points": pts
-    }).execute()
+            # Vérifier si l'équipe existe déjà
+            resp = requests.get(
+                f"{SUPABASE_URL}/rest/v1/equipes",
+                headers=headers,
+                params={"nom": f"eq.{nom}"}
+            )
+            if resp.status_code != 200:
+                st.error(f"Erreur GET équipes : {resp.status_code}")
+                continue
 
-def insert_point_encaisse(journee_id, periode, typ, type_joueur, pts, adversaire):
-    supabase.table("points_encaisse").insert({
-        "journee_id": journee_id,
-        "periode": periode,
-        "type": typ,
-        "type_joueur": type_joueur,
-        "nb_points": pts,
-        "adversaire": adversaire
-    }).execute()
-
-# === Import JSON ===
-if uploaded_file:
-    data = json.load(uploaded_file)
-    st.json(data)
-
-    if st.button("Importer vers Supabase"):
-        try:
-            rencontre = data["data"]["Rencontre"]
-            rencontre_id = int(rencontre["id"])
-            numero = safe_get(rencontre, "Journee", "nom")
-            date_iso = rencontre.get("dateOfficielle") or rencontre.get("dateEffective")
-            score_dom = safe_get(rencontre, "RencontreResultatLocale", "pointsDeMarque") or 0
-            score_ext = safe_get(rencontre, "RencontreResultatVisiteuse", "pointsDeMarque") or 0
-
-            eq_loc_id = int(safe_get(rencontre, "CompetitionEquipeLocale", "id"))
-            eq_vis_id = int(safe_get(rencontre, "CompetitionEquipeVisiteuse", "id"))
-            nom_loc = safe_get(rencontre, "CompetitionEquipeLocale", "nom") or "Local"
-            nom_vis = safe_get(rencontre, "CompetitionEquipeVisiteuse", "nom") or "Visiteur"
-
-            upsert_equipe(eq_loc_id, nom_loc)
-            upsert_equipe(eq_vis_id, nom_vis)
-
-            journee_loc = find_journee(eq_loc_id, rencontre_id) or create_journee(eq_loc_id, rencontre_id, numero, date_iso, nom_vis, score_dom)
-            journee_vis = find_journee(eq_vis_id, rencontre_id) or create_journee(eq_vis_id, rencontre_id, numero, date_iso, nom_loc, score_ext)
-
-            for side, key, eq_id, journee_row in [
-                ("local", "EquipeLocal", eq_loc_id, journee_loc),
-                ("visiteur", "EquipeVisiteur", eq_vis_id, journee_vis)
-            ]:
-                for m in rencontre.get(key, []):
-                    pers = m.get("Personne", {})
-                    pid = int(pers.get("id"))
-                    nom, prenom = pers.get("nom"), pers.get("prenom")
-                    upsert_joueur(pid, nom, prenom)
-                    presence = "Titulaire" if int(m.get("position", 99)) <= 15 else "Remplaçant"
-                    insert_presence(pid, journee_row["id"], presence)
-
-            for act in rencontre.get("Actions", []):
-                typ = act.get("type")
-                pts = ACTION_POINTS.get(typ, 0)
-                minute = act.get("minutes")
-                periode = str(act.get("periode"))
-                comp_eq_id = int(act.get("competitionEquipeId", 0))
-                joueur = safe_get(act, "Joueur1", "Personne", "id")
-
-                if not pts:
-                    continue
-
-                if joueur:
-                    pid = int(joueur)
-                    team = "local" if comp_eq_id == eq_loc_id else "visiteur"
-                    jour_id = journee_loc["id"] if team == "local" else journee_vis["id"]
-                    insert_point_marque(pid, jour_id, typ, minute, pts)
-                    opp_jour_id = journee_vis["id"] if team == "local" else journee_loc["id"]
-                    insert_point_encaisse(opp_jour_id, periode, typ, None, pts, nom_vis if team == "local" else nom_loc)
+            results = resp.json()
+            if results:
+                equipe_ids[nom] = results[0]["id"]
+            else:
+                # Création de l'équipe
+                resp_post = requests.post(
+                    f"{SUPABASE_URL}/rest/v1/equipes",
+                    headers=headers,
+                    json={"nom": nom}
+                )
+                if resp_post.status_code in [200, 201]:
+                    equipe_ids[nom] = resp_post.json()[0]["id"] if resp_post.json() else None
+                    st.success(f"Équipe '{nom}' ajoutée")
                 else:
-                    opp_jour_id = journee_vis["id"] if comp_eq_id == eq_loc_id else journee_loc["id"]
-                    insert_point_encaisse(opp_jour_id, periode, typ, None, pts, nom_vis if comp_eq_id == eq_loc_id else nom_loc)
+                    st.error(f"Erreur POST équipe '{nom}' : {resp_post.text}")
 
-            st.success("✅ Import terminé avec succès !")
+        # --- 2️⃣ Insérer la journée ---
+        journee_data = {
+            "equipe_id": equipe_ids[rencontre["Equipe"]["Nom"]],
+            "numero": rencontre.get("Numero", ""),
+            "date": rencontre.get("Date", ""),
+            "adversaire": rencontre["Adversaire"]["Nom"],
+            "score_dom": rencontre.get("Score", 0),
+            "points_marques_1p1": rencontre.get("Points_1P1", 0),
+            "points_marques_2p1": rencontre.get("Points_2P1", 0),
+            "points_marques_1p2": rencontre.get("Points_1P2", 0),
+            "points_marques_2p2": rencontre.get("Points_2P2", 0)
+        }
 
-        except Exception as e:
-            st.error(f"Erreur : {e}")
+        resp_journee = requests.post(
+            f"{SUPABASE_URL}/rest/v1/journees",
+            headers=headers,
+            json=journee_data
+        )
+        if resp_journee.status_code in [200, 201]:
+            journee_id = resp_journee.json()[0]["id"]
+            st.success("Journée ajoutée")
+        else:
+            st.error(f"Erreur POST journée : {resp_journee.text}")
+            journee_id = None
+
+        # --- 3️⃣ Insérer les joueurs et points ---
+        for joueur in rencontre["Equipe"]["Joueurs"]:
+            # Vérifier si joueur existe déjà
+            resp = requests.get(
+                f"{SUPABASE_URL}/rest/v1/joueurs",
+                headers=headers,
+                params={"nom": f"eq.{joueur['Nom']}", "prenom": f"eq.{joueur['Prenom']}"}
+            )
+            results = resp.json() if resp.status_code == 200 else []
+            joueur_id = None
+            if results:
+                joueur_id = results[0]["id"]
+            else:
+                # Création du joueur
+                joueur_data = {
+                    "nom": joueur["Nom"],
+                    "prenom": joueur["Prenom"],
+                    "equipe_id": equipe_ids[rencontre["Equipe"]["Nom"]]
+                }
+                resp_post = requests.post(
+                    f"{SUPABASE_URL}/rest/v1/joueurs",
+                    headers=headers,
+                    json=joueur_data
+                )
+                if resp_post.status_code in [200, 201]:
+                    joueur_id = resp_post.json()[0]["id"] if resp_post.json() else None
+
+            if not joueur_id:
+                st.error(f"Impossible d'ajouter le joueur {joueur['Nom']}")
+                continue
+
+            # --- Présence joueur ---
+            presence_data = {
+                "joueur_id": joueur_id,
+                "journee_id": journee_id,
+                "presence": joueur.get("Presence", "Absent"),
+                "entree_minute": joueur.get("EntreeMinute", 0),
+                "sortie_minute": joueur.get("SortieMinute", 0)
+            }
+            requests.post(f"{SUPABASE_URL}/rest/v1/presence_joueurs", headers=headers, json=presence_data)
+
+            # --- Points marqués joueur ---
+            for point in joueur.get("PointsMarques", []):
+                point_data = {
+                    "joueur_id": joueur_id,
+                    "journee_id": journee_id,
+                    "type": point["Type"],
+                    "minute": point["Minute"],
+                    "nb_points": point["Points"]
+                }
+                requests.post(f"{SUPABASE_URL}/rest/v1/points_marques_joueur", headers=headers, json=point_data)
+
+        # --- 4️⃣ Points encaissés par période ---
+        for pe in rencontre.get("PointsEncaisse", []):
+            pe_data = {
+                "journee_id": journee_id,
+                "periode": pe.get("Periode", ""),
+                "type": pe.get("Type", ""),
+                "type_joueur": pe.get("TypeJoueur", ""),
+                "nb_points": pe.get("Points", 0),
+                "adversaire": pe.get("Adversaire", "")
+            }
+            requests.post(f"{SUPABASE_URL}/rest/v1/points_encaisse", headers=headers, json=pe_data)
+
+        st.success("✅ Import JSON complet terminé !")
+
+    except Exception as e:
+        st.error(f"Erreur générale : {e}")
